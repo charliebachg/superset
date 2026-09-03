@@ -74,8 +74,10 @@ def histogram(
     if df.empty:
         return df
 
-    # convert to numeric, coercing errors to NaN
-    df.loc[:, column] = to_numeric(df[column], errors="coerce")
+    # convert to numeric, coercing errors to NaN. Reassigning the whole column
+    # rather than writing through ``.loc`` keeps the dtype change legal for a
+    # text column, which pandas 3 holds as ``str`` instead of ``object``.
+    df = df.assign(**{column: to_numeric(df[column], errors="coerce")})
 
     # check if the column contains non-numeric values
     if df[column].isna().any():

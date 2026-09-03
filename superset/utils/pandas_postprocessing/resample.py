@@ -18,6 +18,7 @@ from typing import Optional, Union
 
 import pandas as pd
 from flask_babel import gettext as _
+from pandas.api.types import is_string_dtype
 
 from superset.exceptions import InvalidPostProcessingError
 from superset.utils.pandas_postprocessing.utils import RESAMPLE_METHOD
@@ -79,10 +80,20 @@ def resample(
                 )
 
     if method == "asfreq" and fill_value is not None:
-        _df = df.resample(rule).asfreq(fill_value=fill_value)
+        # A text column is held as ``str`` rather than ``object``, and ``str``
+        # rejects a numeric fill value; object dtype keeps the mixed result the
+        # fill produces.
+        text_columns = {
+            column: object for column in df.columns if is_string_dtype(df[column])
+        }
+        _df = df.astype(text_columns).resample(rule).asfreq(fill_value=fill_value)
         _df = _df.fillna(fill_value)
     elif method == "linear":
-        _df = df.resample(rule).interpolate()
+        # Interpolating a frame with non-numeric columns is an error; the
+        # non-numeric columns keep the NaN that upsampling introduces.
+        _df = df.resample(rule).asfreq()
+        numeric_columns = _df.select_dtypes("number").columns
+        _df[numeric_columns] = _df[numeric_columns].interpolate()
     else:
         _df = getattr(df.resample(rule), method)()
         if method in ("ffill", "bfill"):
