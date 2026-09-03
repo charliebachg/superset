@@ -37,9 +37,9 @@ def _coerce_numeric_text_columns(
     text still fails as it did before.
     """
     coerced = {}
-    for aggregate_options in aggregates.values():
-        column = aggregate_options.get("column")
-        if column is None or column in coerced or column not in df.columns:
+    for name, aggregate_options in aggregates.items():
+        column = aggregate_options.get("column", name)
+        if column in coerced or column not in df.columns:
             continue
         series = df[column]
         if is_object_dtype(series) or not is_string_dtype(series):

@@ -89,11 +89,14 @@ def resample(
         _df = df.astype(text_columns).resample(rule).asfreq(fill_value=fill_value)
         _df = _df.fillna(fill_value)
     elif method == "linear":
-        # Interpolating a frame with non-numeric columns is an error; the
-        # non-numeric columns keep the NaN that upsampling introduces.
+        # Interpolating a frame that holds text is an error; only the dtypes
+        # interpolation supports are interpolated, and a text column keeps the
+        # NaN that upsampling introduces.
         _df = df.resample(rule).asfreq()
-        numeric_columns = _df.select_dtypes("number").columns
-        _df[numeric_columns] = _df[numeric_columns].interpolate()
+        interpolatable_columns = _df.select_dtypes(
+            include=["number", "datetime", "datetimetz", "timedelta"]
+        ).columns
+        _df[interpolatable_columns] = _df[interpolatable_columns].interpolate()
     else:
         _df = getattr(df.resample(rule), method)()
         if method in ("ffill", "bfill"):
