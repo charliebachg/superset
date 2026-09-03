@@ -39,8 +39,18 @@ def _normalize_rolling_type_options(
     """
     Map the public ``quantile`` option onto the ``q`` keyword accepted by
     ``Rolling.quantile``.
+
+    :raises InvalidPostProcessingError: if both ``quantile`` and ``q`` are given.
     """
     if rolling_type == "quantile" and "quantile" in options:
+        if "q" in options:
+            raise InvalidPostProcessingError(
+                _(
+                    "Invalid options for %(rolling_type)s: %(options)s",
+                    rolling_type=rolling_type,
+                    options=options,
+                )
+            )
         return {
             **{k: v for k, v in options.items() if k != "quantile"},
             "q": options["quantile"],

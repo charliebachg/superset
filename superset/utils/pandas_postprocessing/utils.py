@@ -209,18 +209,22 @@ def _get_aggregate_funcs(
 def _cast_like(values: Series, template: Series) -> Series:
     """
     Cast float ``values`` back to the integer dtype of ``template`` when doing so
-    is lossless, so replacing an integer column with e.g. a rolling sum keeps
-    the integer dtype the way slot-based assignment used to.
+    is lossless (finite, integral and within the dtype's bounds), so replacing an
+    integer column with e.g. a rolling sum keeps the integer dtype the way
+    slot-based assignment used to.
     """
-    if (
-        is_integer_dtype(template.dtype)
-        and is_float_dtype(values.dtype)
-        and values.notna().all()
-        and np.isfinite(values).all()
-        and (values == np.round(values)).all()
-    ):
-        return values.astype(template.dtype)
-    return values
+    if not (is_integer_dtype(template.dtype) and is_float_dtype(values.dtype)):
+        return values
+    if not (values.notna().all() and np.isfinite(values).all()):
+        return values
+    if not (values == np.round(values)).all():
+        return values
+    # ``dtype.type`` is the numpy scalar type for both numpy and nullable
+    # (``Int64`` etc.) integer dtypes.
+    bounds = np.iinfo(template.dtype.type)
+    if not ((values >= bounds.min) & (values <= bounds.max)).all():
+        return values
+    return values.astype(template.dtype)
 
 
 def _append_columns(

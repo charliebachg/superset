@@ -172,10 +172,10 @@ def _restore_dropped_metric_columns(
         existing_metrics = (
             set(df.columns.get_level_values(0)) if len(df.columns) > 0 else set()
         )
-        missing = {m for m in expected_metrics if m not in existing_metrics}
+        missing = [m for m in expected_metrics if m not in existing_metrics]
         if missing:
-            # Dict preserves data-insertion order and deduplicates, so restored
-            # columns appear in deterministic order.
+            # Dict preserves insertion order (expected_metrics order, then data
+            # order) and deduplicates, so restored columns are deterministic.
             keys_dict: dict[tuple[Any, ...], None] = {}
             for row in orig_columns.itertuples():
                 for metric in missing:
