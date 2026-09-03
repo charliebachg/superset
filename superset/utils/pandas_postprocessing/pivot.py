@@ -172,10 +172,10 @@ def _restore_dropped_metric_columns(
         existing_metrics = (
             set(df.columns.get_level_values(0)) if len(df.columns) > 0 else set()
         )
-        missing = {m for m in expected_metrics if m not in existing_metrics}
+        missing = [m for m in expected_metrics if m not in existing_metrics]
         if missing:
-            # Dict preserves data-insertion order and deduplicates, so restored
-            # columns appear in deterministic order.
+            # Dict preserves insertion order (expected_metrics order, then data
+            # order) and deduplicates, so restored columns are deterministic.
             keys_dict: dict[tuple[Any, ...], None] = {}
             for row in orig_columns.itertuples():
                 for metric in missing:
@@ -355,8 +355,8 @@ def pivot(  # pylint: disable=too-many-arguments  # noqa: C901
         df = _apply_show_values_as(df, percent_mode)
 
     if combine_value_with_metric:
-        # dropna=False preserves restored all-NaN metric rows that would otherwise
-        # be silently dropped by stack's default dropna=True behavior.
-        df = df.stack(level=0, dropna=False).unstack()
+        # The future_stack implementation never drops all-NaN rows, so restored
+        # all-NaN metric columns survive the reshape.
+        df = df.stack(level=0, future_stack=True).unstack()
 
     return df
