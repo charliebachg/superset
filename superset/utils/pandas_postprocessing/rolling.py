@@ -33,6 +33,21 @@ from superset.utils.pandas_postprocessing.utils import (
 MAX_ROLLING_WINDOW = 10_000
 
 
+def _normalize_rolling_type_options(
+    rolling_type: str, options: dict[str, Any]
+) -> dict[str, Any]:
+    """
+    Map the public ``quantile`` option onto the ``q`` keyword accepted by
+    ``Rolling.quantile``.
+    """
+    if rolling_type == "quantile" and "quantile" in options:
+        return {
+            **{k: v for k, v in options.items() if k != "quantile"},
+            "q": options["quantile"],
+        }
+    return options
+
+
 @validate_column_args("columns")
 def rolling(  # pylint: disable=too-many-arguments
     df: DataFrame,
@@ -98,6 +113,9 @@ def rolling(  # pylint: disable=too-many-arguments
         raise InvalidPostProcessingError(
             _("Invalid rolling_type: %(type)s", type=rolling_type)
         )
+    rolling_type_options = _normalize_rolling_type_options(
+        rolling_type, rolling_type_options
+    )
     try:
         df_rolling = getattr(df_rolling, rolling_type)(**rolling_type_options)
     except TypeError as ex:

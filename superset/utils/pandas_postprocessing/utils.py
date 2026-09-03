@@ -21,7 +21,8 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 from flask_babel import gettext as _
-from pandas import DataFrame, NamedAgg
+from pandas import DataFrame, NamedAgg, Series
+from pandas.api.types import is_float_dtype, is_integer_dtype
 
 from superset.constants import TimeGrain
 from superset.exceptions import InvalidPostProcessingError
@@ -205,6 +206,23 @@ def _get_aggregate_funcs(
     return agg_funcs
 
 
+def _cast_like(values: Series, template: Series) -> Series:
+    """
+    Cast float ``values`` back to the integer dtype of ``template`` when doing so
+    is lossless, so replacing an integer column with e.g. a rolling sum keeps
+    the integer dtype the way slot-based assignment used to.
+    """
+    if (
+        is_integer_dtype(template.dtype)
+        and is_float_dtype(values.dtype)
+        and values.notna().all()
+        and np.isfinite(values).all()
+        and (values == np.round(values)).all()
+    ):
+        return values.astype(template.dtype)
+    return values
+
+
 def _append_columns(
     base_df: DataFrame, append_df: DataFrame, columns: dict[str, str]
 ) -> DataFrame:
@@ -228,7 +246,12 @@ def _append_columns(
     if all(key == value for key, value in columns.items()):
         # make sure to return a new DataFrame instead of changing the `base_df`.
         _base_df = base_df.copy()
-        _base_df.loc[:, columns.keys()] = append_df
+        append_df = append_df.loc[:, list(columns.keys())]
+        for column in append_df.columns:
+            values = append_df[column]
+            if column in _base_df.columns:
+                values = _cast_like(values, _base_df[column])
+            _base_df[column] = values
         return _base_df
     append_df = append_df.rename(columns=columns)
     return pd.concat([base_df, append_df], axis="columns")
