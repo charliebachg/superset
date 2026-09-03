@@ -26,6 +26,7 @@ import dataclasses
 import logging
 import re
 import uuid
+import warnings
 from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -337,13 +338,34 @@ def _apply_temporal_join_format(
     return working_df[column_name]
 
 
+def _parse_mixed_offset_temporal_join_values(series: pd.Series) -> pd.Series:
+    """Parse values with differing UTC offsets as tz-aware object timestamps."""
+    return series.map(
+        lambda value: pd.to_datetime(value, errors="coerce")
+        if pd.notna(value)
+        else pd.NaT
+    )
+
+
 def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Series:
     """Parse working temporal values and wrap pandas parser-policy errors."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
-        return pd.to_datetime(series, errors="coerce", format="mixed")
-    except (TypeError, ValueError) as ex:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error",
+                message="parsing datetimes with mixed time zones",
+                category=FutureWarning,
+            )
+            return pd.to_datetime(series, errors="coerce", format="mixed")
+    except FutureWarning:
+        return _parse_mixed_offset_temporal_join_values(series)
+    except ValueError as ex:
+        if "Mixed timezones detected" in str(ex):
+            return _parse_mixed_offset_temporal_join_values(series)
+        raise _temporal_axis_parse_error(column_name) from ex
+    except TypeError as ex:
         raise _temporal_axis_parse_error(column_name) from ex
 
 
