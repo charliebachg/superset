@@ -341,7 +341,7 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     """Parse working temporal values and wrap pandas parser-policy errors."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
-    if _has_multiple_utc_offsets(series):
+    if _has_mixed_utc_offsets(series):
         # pandas cannot hold mixed offsets in a datetime64 column without
         # converting to UTC; keep object dtype so wall clocks are preserved.
         return series.map(_parse_temporal_join_value)
@@ -349,6 +349,20 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
+
+
+def _has_mixed_utc_offsets(series: pd.Series) -> bool:
+    """Return whether parseable values disagree on UTC offset (naive counts)."""
+    utc_offsets: set[timedelta | None] = set()
+    for value in series.dropna():
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            continue
+        utc_offsets.add(timestamp.utcoffset())
+        if len(utc_offsets) > 1:
+            return True
+    return False
 
 
 def _parse_temporal_join_value(value: Any) -> pd.Timestamp:
