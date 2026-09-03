@@ -16,12 +16,45 @@
 # under the License.
 from typing import Any
 
-from pandas import DataFrame
+from pandas import DataFrame, to_numeric
+from pandas.api.types import is_object_dtype, is_string_dtype
 
 from superset.utils.pandas_postprocessing.utils import (
     _get_aggregate_funcs,
     validate_column_args,
 )
+
+
+def _coerce_numeric_text_columns(
+    df: DataFrame, aggregates: dict[str, dict[str, Any]]
+) -> DataFrame:
+    """
+    Parse aggregated columns that hold numbers as text into numbers.
+
+    A column of numeric strings is held as ``str`` rather than ``object`` from
+    pandas 3 on, and numeric reductions over ``str`` raise. Columns whose text
+    does not parse as a number are left alone, so an aggregation over genuine
+    text still fails as it did before.
+    """
+    coerced = {}
+    for name, aggregate_options in aggregates.items():
+        column = aggregate_options.get("column", name)
+        if column in coerced or column not in df.columns:
+            continue
+        series = df[column]
+        if is_object_dtype(series) or not is_string_dtype(series):
+            continue
+        numeric_series = to_numeric(series, errors="coerce")
+        if numeric_series.notna().equals(series.notna()):
+            coerced[column] = numeric_series
+
+    if not coerced:
+        return df
+
+    df = df.copy()
+    for column, numeric_series in coerced.items():
+        df[column] = numeric_series
+    return df
 
 
 @validate_column_args("groupby")
@@ -39,6 +72,7 @@ def aggregate(
     """
     aggregates = aggregates or {}
     aggregate_funcs = _get_aggregate_funcs(df, aggregates)
+    df = _coerce_numeric_text_columns(df, aggregates)
     if groupby:
         df_groupby = df.groupby(by=groupby)
     else:
