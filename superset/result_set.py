@@ -270,6 +270,14 @@ class SupersetResultSet:
                                 series = pd.to_datetime(
                                     series, utc=True, errors="coerce"
                                 )
+                                # pandas >= 3 keeps microsecond resolution for
+                                # stdlib datetimes, so out-of-ns-bounds values
+                                # are no longer coerced to NaT; restore that.
+                                lo = pd.Timestamp.min.tz_localize("UTC")
+                                hi = pd.Timestamp.max.tz_localize("UTC")
+                                series = series.where(
+                                    series.between(lo, hi)
+                                ).dt.as_unit("ns")
                                 pa_data[i] = pa.Array.from_pandas(
                                     series,
                                     type=pa.timestamp("ns", tz=tz),
