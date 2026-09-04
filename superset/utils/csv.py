@@ -91,18 +91,31 @@ def df_to_escaped_csv(df: pd.DataFrame, **kwargs: Any) -> Any:
     # Escape csv headers
     df = df.rename(columns=escape_values)
 
-    # Escape csv values. Iterate by index label (via ``items``) rather than by
-    # positional offset so the escaped value is written back to the correct row
-    # even when the DataFrame has a non-default index (e.g. the flattened
-    # MultiIndex produced by pivot_table_v2 post-processing). Pairing positional
-    # indices with the label-based ``.at`` accessor would otherwise create
-    # phantom rows and corrupt the output. Only string cells are reassigned, so
-    # the dtype of mixed object columns (e.g. nullable integers) is preserved.
-    for name, column in df.items():
-        if pd.api.types.is_string_dtype(column.dtype):
-            for label, value in column.items():
-                if isinstance(value, str):
-                    df.at[label, name] = escape_value(value)
+    # Escape csv values one column at a time. Replacing a whole column keeps
+    # the escaped values aligned with their original rows even when the
+    # DataFrame has a non-default index (e.g. the flattened MultiIndex produced
+    # by pivot_table_v2 post-processing). ``escape_values`` passes non-string
+    # values through untouched, so nulls are preserved.
+    #
+    # Columns are addressed by position, as in ``superset.utils.excel``: the
+    # verbose_map rename in QueryContextProcessor.get_data can collapse two
+    # columns onto the same label, and ``df[label]`` then yields a DataFrame,
+    # which has no ``dtype``.
+    for idx in range(len(df.columns)):
+        column = df.iloc[:, idx]
+        if not pd.api.types.is_string_dtype(column.dtype):
+            continue
+        if column.dtype == object:
+            # ``map`` re-infers the result dtype, which would turn a mixed
+            # column of Python ints and Nones into floats.
+            escaped = pd.Series(
+                [escape_values(value) for value in column],
+                index=column.index,
+                dtype=object,
+            )
+        else:
+            escaped = column.map(escape_values)
+        df.isetitem(idx, escaped)
 
     return df.to_csv(escapechar="\\", **kwargs)
 
