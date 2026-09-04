@@ -128,7 +128,6 @@ from superset.superset_typing import FlaskResponse
 from superset.utils import json
 from superset.utils.core import (
     error_msg_from_exception,
-    get_user_id,
     get_username,
     parse_js_uri_path_item,
     send_export_zip,
@@ -1384,11 +1383,9 @@ class DatabaseRestApi(BaseSupersetModelRestApi):
             for dashboard in data["dashboards"]
             if security_manager.can_access_dashboard(dashboard)
         ]
-        user_id = get_user_id()
         sqllab_tab_states = [
             {"id": tab_state.id, "label": tab_state.label, "active": tab_state.active}
             for tab_state in data["sqllab_tab_states"]
-            if tab_state.user_id == user_id
         ]
         return self.response(
             200,

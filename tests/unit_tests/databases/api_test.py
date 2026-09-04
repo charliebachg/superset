@@ -2700,7 +2700,7 @@ def test_related_objects_only_returns_current_user_tab_states(
     )
     db.session.commit()
 
-    mocker.patch("superset.databases.api.get_user_id", return_value=1)
+    mocker.patch("superset.daos.database.get_user_id", return_value=1)
     mocker.patch("superset.utils.log.DBEventLogger.log")
 
     response = client.get(f"/api/v1/database/{database.id}/related_objects/")
