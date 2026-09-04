@@ -2078,11 +2078,11 @@ def _process_datetime_column(
         if format_to_use:
             converted = pd.to_datetime(
                 df[col.col_label],
-                utc=False,
+                utc=True,
                 format=format_to_use,
                 errors="coerce",
                 exact=False,
-            )
+            ).dt.tz_convert(None)
             # A format that coerces every non-null value to NaT is a mismatch
             # (e.g. an epoch-millis column that inherited a '%Y' string format
             # when used as a chart's granularity). Assigning it would silently
@@ -2101,11 +2101,11 @@ def _process_datetime_column(
                 warnings.filterwarnings("ignore", message=".*Could not infer format.*")
                 df[col.col_label] = pd.to_datetime(
                     df[col.col_label],
-                    utc=False,
+                    utc=True,
                     format=None,
                     errors="coerce",
                     exact=False,
-                )
+                ).dt.tz_convert(None)
 
 
 def normalize_dttm_col(
