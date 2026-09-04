@@ -91,25 +91,31 @@ def df_to_escaped_csv(df: pd.DataFrame, **kwargs: Any) -> Any:
     # Escape csv headers
     df = df.rename(columns=escape_values)
 
-    # Escape csv values one column at a time. Assigning a whole column keeps
+    # Escape csv values one column at a time. Replacing a whole column keeps
     # the escaped values aligned with their original rows even when the
     # DataFrame has a non-default index (e.g. the flattened MultiIndex produced
     # by pivot_table_v2 post-processing). ``escape_values`` passes non-string
-    # values through untouched, so nulls are preserved. For an object column
-    # the result dtype is pinned, because ``map`` re-infers it and would turn a
-    # mixed column of Python ints and Nones into floats.
-    for name in list(df.columns):
-        column = df[name]
+    # values through untouched, so nulls are preserved.
+    #
+    # Columns are addressed by position, as in ``superset.utils.excel``: the
+    # verbose_map rename in QueryContextProcessor.get_data can collapse two
+    # columns onto the same label, and ``df[label]`` then yields a DataFrame,
+    # which has no ``dtype``.
+    for idx in range(len(df.columns)):
+        column = df.iloc[:, idx]
         if not pd.api.types.is_string_dtype(column.dtype):
             continue
         if column.dtype == object:
-            df[name] = pd.Series(
+            # ``map`` re-infers the result dtype, which would turn a mixed
+            # column of Python ints and Nones into floats.
+            escaped = pd.Series(
                 [escape_values(value) for value in column],
                 index=column.index,
                 dtype=object,
             )
         else:
-            df[name] = column.map(escape_values)
+            escaped = column.map(escape_values)
+        df.isetitem(idx, escaped)
 
     return df.to_csv(escapechar="\\", **kwargs)
 
