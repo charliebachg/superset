@@ -172,9 +172,9 @@ class TabStateView(BaseSupersetView):
                 return Response(status=403)
 
             client_id = json.loads(request.form["queryId"])
-            db.session.query(Query).filter_by(client_id=client_id).update(
-                {"sql_editor_id": tab_state_id}
-            )
+            db.session.query(Query).filter_by(
+                client_id=client_id, user_id=get_user_id()
+            ).update({"sql_editor_id": tab_state_id})
             db.session.commit()
             return json_success(json.dumps(tab_state_id))
         except Exception as ex:  # pylint: disable=broad-except
