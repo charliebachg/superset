@@ -337,11 +337,40 @@ def _apply_temporal_join_format(
     return working_df[column_name]
 
 
+def _timestamp_or_nat(value: Any) -> pd.Timestamp:
+    """Parse one value as pandas does with ``errors="coerce"``."""
+    if pd.isna(value):
+        return pd.NaT
+    try:
+        return pd.Timestamp(value)
+    except (TypeError, ValueError, OverflowError):
+        return pd.NaT
+
+
+def _has_mixed_timezones(series: pd.Series) -> bool:
+    """Return whether parseable values differ in UTC offset or tz-awareness."""
+    utc_offsets: set[timedelta | None] = set()
+    for value in series.dropna():
+        timestamp = _timestamp_or_nat(value)
+        if timestamp is pd.NaT:
+            continue
+        utc_offsets.add(timestamp.utcoffset())
+        if len(utc_offsets) > 1:
+            return True
+    return False
+
+
 def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Series:
     """Parse working temporal values and wrap pandas parser-policy errors."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
+        if _has_mixed_timezones(series):
+            # pandas rejects mixed time zones unless ``utc=True``, which would
+            # convert every value to UTC and change the wall clocks the join
+            # aligns on. Parse element-wise into an object Series so each
+            # value keeps its own offset (or lack of one).
+            return series.map(_timestamp_or_nat)
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
