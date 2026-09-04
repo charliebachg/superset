@@ -44,7 +44,7 @@ from superset.models.core import Database, DatabaseUserOAuth2Tokens
 from superset.models.dashboard import Dashboard
 from superset.models.slice import Slice
 from superset.models.sql_lab import TabState
-from superset.utils.core import DatasourceType
+from superset.utils.core import DatasourceType, get_user_id
 from superset.utils.ssh_tunnel import unmask_password_info
 
 logger = logging.getLogger(__name__)
@@ -227,7 +227,12 @@ class DatabaseDAO(BaseDAO[Database]):
         )
 
         sqllab_tab_states = (
-            db.session.query(TabState).filter(TabState.database_id == database_id).all()
+            db.session.query(TabState)
+            .filter(
+                TabState.database_id == database_id,
+                TabState.user_id == get_user_id(),
+            )
+            .all()
         )
 
         return {

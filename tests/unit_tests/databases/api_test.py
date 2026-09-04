@@ -2670,3 +2670,43 @@ def test_import_includes_configuration_method(
         f"'configuration_method' not found in database list response: {db_obj_api}"
     )
     assert db_obj_api["configuration_method"] == "dynamic_form"
+
+
+def test_related_objects_only_returns_current_user_tab_states(
+    mocker: MockerFixture,
+    app: Any,
+    session: Session,
+    client: Any,
+    full_api_access: None,
+) -> None:
+    """
+    Test that ``related_objects`` does not expose other users' SQL Lab tabs.
+    """
+    from superset.databases.api import DatabaseRestApi
+    from superset.models.core import Database
+    from superset.models.sql_lab import TabState
+
+    DatabaseRestApi.datamodel._session = session
+    Database.metadata.create_all(session.get_bind())  # pylint: disable=no-member
+
+    database = Database(database_name="my_database", sqlalchemy_uri="sqlite://")
+    db.session.add(database)
+    db.session.flush()
+    db.session.add_all(
+        [
+            TabState(user_id=1, label="mine", active=True, database_id=database.id),
+            TabState(user_id=2, label="theirs", active=True, database_id=database.id),
+        ]
+    )
+    db.session.commit()
+
+    mocker.patch("superset.daos.database.get_user_id", return_value=1)
+    mocker.patch("superset.utils.log.DBEventLogger.log")
+
+    response = client.get(f"/api/v1/database/{database.id}/related_objects/")
+
+    assert response.status_code == 200
+    assert response.json["sqllab_tab_states"]["count"] == 1
+    assert [t["label"] for t in response.json["sqllab_tab_states"]["result"]] == [
+        "mine"
+    ]
