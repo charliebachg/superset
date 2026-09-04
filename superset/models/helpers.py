@@ -342,6 +342,14 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
+        if _has_multiple_utc_offsets(series):
+            # pandas rejects mixed UTC offsets unless ``utc=True``, which would
+            # convert every value to UTC and change the wall clocks the join
+            # aligns on. Parse element-wise into an object Series so each
+            # value keeps its own offset.
+            return series.map(
+                lambda value: pd.Timestamp(value) if pd.notna(value) else pd.NaT
+            )
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
