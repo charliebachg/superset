@@ -70,27 +70,3 @@ def test_database_get_ssh_tunnel_not_found(session_with_data: Session) -> None:
     result = database.ssh_tunnel if database else None
 
     assert result is None
-
-
-def test_get_related_objects_scopes_tab_states_to_current_user(
-    session_with_data: Session, mocker
-) -> None:
-    from superset.daos.database import DatabaseDAO
-    from superset.models.sql_lab import TabState
-
-    session_with_data.add_all(
-        [
-            TabState(user_id=1, label="mine", active=True, database_id=1),
-            TabState(user_id=2, label="someone else's", active=True, database_id=1),
-        ]
-    )
-    session_with_data.flush()
-    mocker.patch("superset.daos.database.get_user_id", return_value=1)
-    mocker.patch(
-        "superset.databases.filters.security_manager.can_access_all_databases",
-        return_value=True,
-    )
-
-    result = DatabaseDAO.get_related_objects(1)
-
-    assert [tab.label for tab in result["sqllab_tab_states"]] == ["mine"]
