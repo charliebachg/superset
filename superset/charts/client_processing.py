@@ -558,6 +558,9 @@ def pivot_df(  # pylint: disable=too-many-locals, too-many-arguments, too-many-s
         if not isinstance(df, pd.DataFrame):
             df = df.to_frame()
         df = df.T
+        # stacking moves a column level into the index without sorting it, so
+        # sort the columns back into label order before selecting the metrics
+        df = df.sort_index(axis=1)
         df = df[metrics]
         df.index = pd.Index([*df.index[:-1], metric_name], name="metric")
 
