@@ -342,7 +342,7 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
-        if _has_multiple_utc_offsets(series):
+        if _has_mixed_timezones(series):
             return series.map(
                 lambda value: pd.NaT
                 if pd.isna(value)
@@ -410,6 +410,18 @@ def _coerce_temporal_join_series(
         return timestamp.tz_localize(None) if timestamp.tzinfo else timestamp
 
     return converted.map(as_wall_clock)
+
+
+def _has_mixed_timezones(series: pd.Series) -> bool:
+    """Return whether non-null values differ in UTC offset or tz-awareness."""
+    utc_offsets: set[timedelta | None] = set()
+    for value in series.dropna():
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            return False
+        utc_offsets.add(timestamp.utcoffset())
+    return len(utc_offsets) > 1
 
 
 def _has_multiple_utc_offsets(series: pd.Series) -> bool:
