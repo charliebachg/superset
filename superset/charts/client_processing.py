@@ -554,10 +554,13 @@ def pivot_df(  # pylint: disable=too-many-locals, too-many-arguments, too-many-s
     # if no rows were passed the metrics will be in the rows, so we
     # need to move them back to columns
     if columns and not rows:
-        df = df.stack()
+        df = df.stack(future_stack=True)
         if not isinstance(df, pd.DataFrame):
             df = df.to_frame()
         df = df.T
+        # stacking moves a column level into the index without sorting it, so
+        # sort the columns back into label order before selecting the metrics
+        df = df.sort_index(axis=1)
         df = df[metrics]
         df.index = pd.Index([*df.index[:-1], metric_name], name="metric")
 
@@ -636,13 +639,13 @@ def pivot_df(  # pylint: disable=too-many-locals, too-many-arguments, too-many-s
                 # we need to replace the temporary placeholder with either a string
                 # or np.nan, depending on the column type so that they can sum correctly
                 if pd.api.types.is_numeric_dtype(df[col]):
-                    df[col].replace("SUPERSET_PANDAS_NAN", np.nan, inplace=True)
+                    df[col] = df[col].replace("SUPERSET_PANDAS_NAN", np.nan)
                 else:
-                    df[col].replace("SUPERSET_PANDAS_NAN", "nan", inplace=True)
+                    df[col] = df[col].replace("SUPERSET_PANDAS_NAN", "nan")
         else:
             # when we applied metrics on rows, we switched the columns and rows
             # so checking column type doesn't apply. Replace everything with np.nan
-            df.replace("SUPERSET_PANDAS_NAN", np.nan, inplace=True)
+            df = df.mask(df == "SUPERSET_PANDAS_NAN").infer_objects()
         for level in range(df.columns.nlevels):
             subgroups = {group[:level] for group in groups}
             for subgroup in subgroups:
@@ -751,7 +754,7 @@ def pivot_df(  # pylint: disable=too-many-locals, too-many-arguments, too-many-s
         df = df.T
 
     # replace the remaining temporary placeholder string for np.nan after pivoting
-    df.replace("SUPERSET_PANDAS_NAN", np.nan, inplace=True)
+    df = df.mask(df == "SUPERSET_PANDAS_NAN").infer_objects()
     df.rename(
         index={"SUPERSET_PANDAS_NAN": np.nan},
         columns={"SUPERSET_PANDAS_NAN": np.nan},
