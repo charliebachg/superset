@@ -341,6 +341,13 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     """Parse working temporal values and wrap pandas parser-policy errors."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
+    if _has_multiple_utc_offsets(series):
+        # pandas refuses to build a single datetime dtype from mixed UTC
+        # offsets without converting to UTC; keep each value's local wall
+        # clock by parsing into timezone-aware Timestamps instead.
+        return series.map(
+            lambda value: pd.NaT if pd.isna(value) else pd.Timestamp(value)
+        )
     try:
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
