@@ -28,7 +28,7 @@ import re
 import uuid
 from collections.abc import Hashable, Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from typing import (
     Any,
     Callable,
@@ -348,14 +348,20 @@ def _timestamp_or_nat(value: Any) -> pd.Timestamp:
 
 
 def _has_mixed_timezones(series: pd.Series) -> bool:
-    """Return whether parseable values differ in UTC offset or tz-awareness."""
+    """Return whether parseable values differ in time zone, offset or awareness.
+
+    Distinct named zones sharing an offset (e.g. America/New_York and
+    America/Toronto in winter) still cannot share one datetime dtype.
+    """
+    time_zones: set[tzinfo | None] = set()
     utc_offsets: set[timedelta | None] = set()
     for value in series.dropna():
         timestamp = _timestamp_or_nat(value)
         if timestamp is pd.NaT:
             continue
+        time_zones.add(timestamp.tzinfo)
         utc_offsets.add(timestamp.utcoffset())
-        if len(utc_offsets) > 1:
+        if len(time_zones) > 1 or len(utc_offsets) > 1:
             return True
     return False
 
