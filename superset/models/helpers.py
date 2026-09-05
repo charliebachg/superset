@@ -342,17 +342,34 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
-        if _has_multiple_utc_offsets(series):
+        if _has_mixed_timezones(series):
             return _parse_mixed_offset_wall_clocks(series)
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
 
 
+def _has_mixed_timezones(series: pd.Series) -> bool:
+    """
+    Return whether the values differ in UTC offset or in timezone awareness,
+    which pandas refuses to parse as one series without ``utc=True``.
+    """
+    utc_offsets: set[timedelta | None] = set()
+    for value in series.dropna():
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            continue
+        utc_offsets.add(timestamp.utcoffset())
+        if len(utc_offsets) > 1:
+            return True
+    return False
+
+
 def _parse_mixed_offset_wall_clocks(series: pd.Series) -> pd.Series:
     """
-    Parse values carrying different UTC offsets one at a time and keep each
-    value's own local wall clock; pandas refuses to parse them as one series.
+    Parse values carrying different UTC offsets, or a mix of aware and naive
+    values, one at a time and keep each value's own local wall clock.
     """
 
     def parse(value: Any) -> pd.Timestamp:
