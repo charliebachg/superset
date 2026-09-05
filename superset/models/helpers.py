@@ -341,17 +341,38 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     """Parse working temporal values and wrap pandas parser-policy errors."""
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
-    if _has_multiple_utc_offsets(series):
+    if _has_mixed_utc_offsets(series):
         # pandas refuses to build a single datetime dtype from mixed UTC
         # offsets without converting to UTC; keep each value's local wall
-        # clock by parsing into timezone-aware Timestamps instead.
-        return series.map(
-            lambda value: pd.NaT if pd.isna(value) else pd.Timestamp(value)
-        )
+        # clock by parsing element-wise instead, coercing bad values to NaT.
+        return series.map(_parse_temporal_value_or_nat)
     try:
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
+
+
+def _parse_temporal_value_or_nat(value: Any) -> pd.Timestamp:
+    """Parse a single value into a Timestamp, returning NaT when impossible."""
+    if pd.isna(value):
+        return pd.NaT
+    try:
+        return pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return pd.NaT
+
+
+def _has_mixed_utc_offsets(series: pd.Series) -> bool:
+    """Return whether parseable values differ in tz-awareness or UTC offset."""
+    utc_offsets: set[timedelta | None] = set()
+    for value in series.dropna():
+        timestamp = _parse_temporal_value_or_nat(value)
+        if timestamp is pd.NaT:
+            continue
+        utc_offsets.add(timestamp.utcoffset())
+        if len(utc_offsets) > 1:
+            return True
+    return False
 
 
 def _retry_temporal_join_values_at_wider_resolution(
