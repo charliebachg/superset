@@ -342,9 +342,28 @@ def _parse_temporal_join_values(series: pd.Series, column_name: str) -> pd.Serie
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
     try:
+        if _has_multiple_utc_offsets(series):
+            return _parse_mixed_offset_wall_clocks(series)
         return pd.to_datetime(series, errors="coerce", format="mixed")
     except (TypeError, ValueError) as ex:
         raise _temporal_axis_parse_error(column_name) from ex
+
+
+def _parse_mixed_offset_wall_clocks(series: pd.Series) -> pd.Series:
+    """
+    Parse values carrying different UTC offsets one at a time and keep each
+    value's own local wall clock; pandas refuses to parse them as one series.
+    """
+
+    def parse(value: Any) -> pd.Timestamp:
+        if pd.isna(value):
+            return pd.NaT
+        timestamp = pd.to_datetime(value, errors="coerce", format="mixed")
+        if pd.isna(timestamp):
+            return pd.NaT
+        return timestamp.tz_localize(None) if timestamp.tzinfo else timestamp
+
+    return pd.to_datetime(series.map(parse), errors="coerce")
 
 
 def _retry_temporal_join_values_at_wider_resolution(
